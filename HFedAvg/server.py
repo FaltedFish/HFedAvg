@@ -256,7 +256,7 @@ if __name__ == "__main__":
                     opti,
                     global_parameters
                 )
-                print("local:",local_parameters)
+                #print("local:",local_parameters)
                 # single_received_by_relay 中继收到的某一个节点的信号
                 e = get_e()
                 client_int =int(client[client.find("client") + len("client"):])
@@ -325,11 +325,11 @@ if __name__ == "__main__":
             for key in global_parameters:
                 global_parameters[key] /= (args['num_of_clients']*ETA)
                 test_sum_parameters[key]/= args['num_of_clients']
-                print("global:",global_parameters[key])
-                print("test:  ",test_sum_parameters[key])
-                print("local: ",local_parameters[key])
-                print("cha ",test_sum_parameters[key]-local_parameters[key])
-                print( torch.mean((test_sum_parameters[key] - local_parameters[key]) ** 2))
+                #print("global:",global_parameters[key])
+                #print("test:  ",test_sum_parameters[key])
+                #print("local: ",local_parameters[key])
+                #print("cha ",test_sum_parameters[key]-local_parameters[key])
+                print( torch.mean((test_sum_parameters[key] - global_parameters[key]) ** 2))
                 # 如果需要添加噪声或其他操作，可以在此处进行
 
         # 更新中心服务器的模型参数
