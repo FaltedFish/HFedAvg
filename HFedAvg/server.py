@@ -1,3 +1,4 @@
+import copy
 import os
 import argparse
 from random import random
@@ -259,7 +260,7 @@ if __name__ == "__main__":
                 # single_received_by_relay 中继收到的某一个节点的信号
                 e = get_e()
                 client_int =int(client[client.find("client") + len("client"):])
-                parameters[client_int]={key: val for key, val in local_parameters.items()}
+                parameters[client_int]=copy.deepcopy({key: val for key, val in local_parameters.items()})
                 h_n_r=dis[client_int]**(-2)*0.001
                 b_n[client_int]=min(ETA/h_n_r,MAX_P**0.5)
                 single_received_by_relay = {key: single_channel(val, h_n_r, b_n[client_int], e)
