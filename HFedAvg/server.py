@@ -234,7 +234,7 @@ if __name__ == "__main__":
     # num_comm 表示通信次数，此处设置为1k
     # 通讯次数一共1000次
     acc = []
-    parameters = [0] * len(cluster_labels)
+    parameters = [{} for _ in range(len(cluster_labels))]
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
 
@@ -255,11 +255,11 @@ if __name__ == "__main__":
                     opti,
                     global_parameters
                 )
-
+                print("local:",local_parameters)
                 # single_received_by_relay 中继收到的某一个节点的信号
                 e = get_e()
                 client_int =int(client[client.find("client") + len("client"):])
-                parameters[client_int]=local_parameters
+                parameters[client_int]={key: val for key, val in local_parameters.items()}
                 h_n_r=dis[client_int]**(-2)*0.001
                 b_n[client_int]=min(ETA/h_n_r,MAX_P**0.5)
                 single_received_by_relay = {key: single_channel(val, h_n_r, b_n[client_int], e)
@@ -297,6 +297,12 @@ if __name__ == "__main__":
 
             # last_cluster_parameters = sum_parameters
 
+        test_sum_parameters = parameters[0]
+        for i in range(args['num_of_clients']):
+            if i == 0:
+                continue
+            for key in parameters[i].keys():
+                test_sum_parameters[key] += parameters[i][key]
         # 簇间联邦学习
         # 聚合所有簇的全局模型参数
         global_parameters = None  # 这个簇的参数
@@ -316,7 +322,13 @@ if __name__ == "__main__":
         if global_parameters is not None:
             num_clusters = len(cluster_global_models)
             for key in global_parameters:
-                global_parameters[key] /= (num_clusters*ETA)
+                global_parameters[key] /= (args['num_of_clients']*ETA)
+                test_sum_parameters[key]/= args['num_of_clients']
+                print("global:",global_parameters[key])
+                print("test:  ",test_sum_parameters[key])
+                print("local: ",local_parameters[key])
+                print("cha ",test_sum_parameters[key]-local_parameters[key])
+                print( torch.mean((test_sum_parameters[key] - local_parameters[key]) ** 2))
                 # 如果需要添加噪声或其他操作，可以在此处进行
 
         # 更新中心服务器的模型参数
