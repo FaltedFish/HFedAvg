@@ -9,6 +9,8 @@ import torch
 import pandas as pd
 import torch.nn.functional as F
 from torch import optim
+
+from HFedAvg.signals import get_e
 from Models import Mnist_2NN, Mnist_CNN, breast_net, heart_net, phone_net
 from clients import ClientsGroup, client
 from model.WideResNet import WideResNet
@@ -209,8 +211,10 @@ if __name__ == "__main__":
     acc = []
     new_global_parameters =None
     b_n=get_b_n()
+    mse_parameters=None
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
+        mse_parameters = None
         cluster_global_models = {}
         sum_parameters = None  # 用于累积所有客户端的模型参数
         if new_global_parameters is not None:
@@ -226,6 +230,13 @@ if __name__ == "__main__":
                 opti,
                 global_parameters
             )
+            if mse_parameters is None:
+                mse_parameters = local_parameters.copy()
+            else:
+                mse_parameters = {key: mse_parameters[key] + local_parameters[key] for key in mse_parameters if
+                                  key in local_parameters}
+
+            local_parameters = {key: val + get_e() for key, val in local_parameters.items()}
 
             # 将本地更新的模型参数累加到 sum_parameters
             if sum_parameters is None:
@@ -236,6 +247,10 @@ if __name__ == "__main__":
         # 全局联邦学习
         # 聚合所有节点的全局模型参数
         new_global_parameters = {key: val.clone()/np.sum(b_n) for key, val in sum_parameters.items()}
+        mse=0
+        for key in new_global_parameters:
+            mse_parameters[key] /= args['num_of_clients']
+            mse += torch.sum((mse_parameters[key] - new_global_parameters[key]) ** 2).item()
         '''
             训练结束之后，我们要通过测试集来验证方法的泛化性，
             注意:虽然训练时，Server没有得到过任何一条数据，但是联邦学习最终的目的
@@ -246,6 +261,7 @@ if __name__ == "__main__":
         # if (i + 1) % args['val_freq'] == 0:
         #  加载Server在最后得到的模型参数
         net.load_state_dict(new_global_parameters, strict=True)
+        print(mse)
         sum_accu = 0
         num = 0
         # 载入测试集
