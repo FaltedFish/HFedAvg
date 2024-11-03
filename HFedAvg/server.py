@@ -1,3 +1,4 @@
+import csv
 import os
 import argparse
 
@@ -280,7 +281,11 @@ if __name__ == "__main__":
     plt.ylabel('accuracy')
     plt.title('无优化')
     plt.show()
-    # 将 DataFrame 存储到 Excel 文件
-    excel_file_path = 'output.xlsx'
-    df.to_excel(excel_file_path, index=False)
-    test_txt.close()
+    csv_file_path = "one_step.csv"
+    with open(csv_file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+
+        # 将数组中的每个元素作为一行写入CSV文件的一列
+        for value in result:
+            writer.writerow([value])
+        csvfile.flush()
