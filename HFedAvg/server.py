@@ -9,6 +9,8 @@ import torch
 import pandas as pd
 import torch.nn.functional as F
 from torch import optim
+
+from HFedAvg.signals import get_e
 from Models import Mnist_2NN, Mnist_CNN, breast_net, heart_net, phone_net
 from clients import ClientsGroup, client
 from model.WideResNet import WideResNet
@@ -216,7 +218,7 @@ if __name__ == "__main__":
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
         product_b_r_b_n = 0
-
+        mse_parameters =None
         cluster_global_models = {}
         for cluster_label, clients in cluster_clients.items():
             sum_parameters = None  # 用于累积簇内所有客户端的模型参数
@@ -232,6 +234,12 @@ if __name__ == "__main__":
                     opti,
                     global_parameters
                 )
+                if mse_parameters is None:
+                    mse_parameters=local_parameters.copy()
+                else:
+                    mse_parameters={key: mse_parameters[key] + local_parameters[key] for key in mse_parameters if key in local_parameters}
+
+                local_parameters={key: val+get_e() for key, val in local_parameters.items()}
 
                 # 将本地更新的模型参数累加到 sum_parameters
                 if sum_parameters is None:
@@ -257,11 +265,14 @@ if __name__ == "__main__":
                 for key in cluster_params:
                     global_parameters[key] += cluster_params[key]
 
+        mse=0
         # 计算最终全局模型的平均参数
         if global_parameters is not None:
             num_clusters = len(cluster_global_models)
             for key in global_parameters:
                 global_parameters[key] /= product_b_r_b_n
+                mse_parameters[key] /= args['num_of_clients']
+                mse += torch.sum((mse_parameters[key] - global_parameters[key]) ** 2).item()
                 # 如果需要添加噪声或其他操作，可以在此处进行
 
 
@@ -277,6 +288,7 @@ if __name__ == "__main__":
         # if (i + 1) % args['val_freq'] == 0:
         #  加载Server在最后得到的模型参数
         net.load_state_dict(global_parameters, strict=True)
+        print(mse)
         sum_accu = 0
         num = 0
         # 载入测试集
