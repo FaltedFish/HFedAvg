@@ -1,6 +1,5 @@
 import os
 import argparse
-from random import random
 
 from matplotlib import pyplot as plt
 from tqdm import tqdm
@@ -14,7 +13,6 @@ from clients import ClientsGroup, client
 from model.WideResNet import WideResNet
 from getData import GetDataSet
 from kmeans import k_means
-from signals import single_channel, get_e
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description="FedAvg")
 parser.add_argument('-g', '--gpu', type=str, default='0', help='gpu id to use(e.g. 0,1,2,3)')
@@ -38,7 +36,7 @@ parser.add_argument('-dataset', "--dataset", type=str, default="phone", help="�
 parser.add_argument('-vf', "--val_freq", type=int, default=50, help="model validation frequency(of communications)")
 parser.add_argument('-sf', '--save_freq', type=int, default=100, help='global model save frequency(of communication)')
 # n um_comm 表示通信次数，此处设置为1k
-parser.add_argument('-ncomm', '--num_comm', type=int, default=100, help='number of communications')
+parser.add_argument('-ncomm', '--num_comm', type=int, default=200, help='number of communications')
 parser.add_argument('-sp', '--save_path', type=str, default='./checkpoints', help='the saving path of checkpoints')
 parser.add_argument('-iid', '--IID', type=int, default=1, help='the way to allocate data to clients')
 
@@ -78,20 +76,13 @@ def getbound(anchor):
     return a, lb, ub
 
 
-def cal_eta(dis,b_n,dis_r_bs,b_r):
-    h = [x ** (-2) * 0.001 for x in dis ]
-    h_r_bs = [x ** (-2) * 0.001 for x in dis_r_bs ]
-    sum_hn_bn = 0
-    sum_hn2_bn2 = 0
+def get_b_n():
+    return np.random.uniform(1, 2, args['num_of_clients'])
 
-    for i in range(len(h)):
-        sum_hn2_bn2+=h[i]**2*b_n[i]**2
-        sum_hn_bn+=h[i]*b_n[i]
-    sum_hr2_br2=0
-    for i in range(len(h_r_bs)):
-        sum_hr2_br2+=h_r_bs[i]**2*b_r[i]**2
-    noise = 10e-5
-    return (sum_hn2_bn2+noise+noise/sum_hr2_br2)/sum_hn_bn
+
+def get_b_r():
+    return np.random.uniform(1, 2, args['num_of_clusters'])
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -149,9 +140,9 @@ if __name__ == "__main__":
     ## 创建Clients群
     '''
         创建Clients群100个
-        
+
         得到Mnist数据
-        
+
         一共有60000个样本
         100个客户端
         IID：
@@ -161,14 +152,7 @@ if __name__ == "__main__":
             然后将其划分为200组大小为300的数据切片，然后分给每个Client两个切片。
             注： 我觉得着并不是真正意义上的Non—IID
     '''
-    # 初始化客户端组对象
-    # ClientsGroup是一个用于管理客户端数据的类。通过传入数据集、IID、客户端数量和设备信息来创建一个客户端组实例。
-    # 这里主要为了说明如何实例化这个类，以及实例化后如何获取测试数据加载器。
     myClients = ClientsGroup(args['dataset'], args['IID'], args['num_of_clients'], dev)
-
-    # 获取客户端组的测试数据加载器
-    # 通过myClients对象的test_data_loader属性，可以获取用于测试的数据加载器。
-    # 这对于后续的模型验证和测试是非常重要的。
     testDataLoader = myClients.test_data_loader
 
     # ---------------------------------------以上准备工作已经完成------------------------------------------#
@@ -200,9 +184,8 @@ if __name__ == "__main__":
     # 将特征组合成一个二维数组（每个客户端一行）
     Metric = np.array([feature_0, feature_1, feature_2, feature_3]).T
 
-    result =[]
     '''
-    
+
     # 使用 KMeans 对客户端进行聚类
     cluster_labels = k_means(Metric,args['num_of_clusters'])
     #cluster_labels = kmeans.fit_predict(Metric)
@@ -222,25 +205,17 @@ if __name__ == "__main__":
     for client, label in zip(myClients.clients_set.keys(), cluster_labels):
         cluster_clients[label].append(client)
 
-    #最大发射功率
-    MAX_P = 100
-    #接受系数
-    ETA=1
-    #每个节点到中继的距离
-    dis = [np.random.randint(50, 200) for _ in range(len(cluster_labels))]
-    dis_r_bs = [np.random.randint(100, 300) for _ in range(len(cluster_clients.items()))]
-    b_n = [0]*len(cluster_labels)
-    b_r = [0]*len(cluster_clients.items())
+    result = []
     # num_comm 表示通信次数，此处设置为1k
     # 通讯次数一共1000次
     acc = []
-    parameters = [0] * len(cluster_labels)
+    b_n=get_b_n()
+    b_r=get_b_r()
+    product_b_r_b_n =0
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
 
-        cluster_global_models = {}  # key：簇序号，value：模型参数
-        last_cluster_parameters = {}
-        # 依次遍历每个簇
+        cluster_global_models = {}
         for cluster_label, clients in cluster_clients.items():
             sum_parameters = None  # 用于累积簇内所有客户端的模型参数
 
@@ -256,71 +231,38 @@ if __name__ == "__main__":
                     global_parameters
                 )
 
-                # single_received_by_relay 中继收到的某一个节点的信号
-                e = get_e()
-                client_int =int(client[client.find("client") + len("client"):])
-                parameters[client_int]=local_parameters
-                h_n_r=dis[client_int]**(-2)*0.001
-                b_n[client_int]=min(ETA/h_n_r,MAX_P**0.5)
-                single_received_by_relay = {key: single_channel(val, h_n_r, b_n[client_int], e)
-                                            for key, val in local_parameters.items()}
-                # 将中继收到的各个节点的模型参数累加到 sum_parameters
+                # 将本地更新的模型参数累加到 sum_parameters
                 if sum_parameters is None:
-                    sum_parameters = single_received_by_relay
+                    sum_parameters = {key: val.clone()*b_n[int(client[client.find("client") + len("client"):])] for key, val in local_parameters.items()}
                 else:
-                    for key in single_received_by_relay:
-                        sum_parameters[key] += single_received_by_relay[key]
-
-            # 另一个中继对该节点的干扰
-            e = get_e()
-            other_relay_signal = {}
-            # 如果 last_cluster_parameters 不为空，则将 last_cluster_parameters 作为其他中继的干扰信号
-            if last_cluster_parameters != {}:
-                other_relay_signal = {key: single_channel(val, np.random.normal(1, 0.1), 1, e)
-                                      for key, val in last_cluster_parameters.items()}
-            # 计算中继收到的模型参数
-            e = get_e()
-            # 如果其他中继的干扰信号不为空，则将 sum_parameters 加上其他中继的干扰信号和e
-            if other_relay_signal != {}:
-                for key in sum_parameters:
-                    sum_parameters[key] += other_relay_signal[key]
-            # 否则加上干扰e即可
-            else:
-                sum_parameters = {key: val.clone() + e for key, val in sum_parameters.items()}
+                    for key in local_parameters:
+                        sum_parameters[key] += local_parameters[key]*b_n[int(client(client.find("client") + len("client")))]
+                product_b_r_b_n+=b_r[cluster_label]*b_n[int(client[client.find("client") + len("client"):])]
 
             # 计算簇内全局模型参数的平均值
             if sum_parameters is not None:
                 num_clients_in_cluster = len(clients)
                 for key in sum_parameters:
-                    sum_parameters[key] /= num_clients_in_cluster
+                    sum_parameters[key] *= b_r[cluster_label]
                     cluster_global_models[cluster_label] = sum_parameters
-
-            # last_cluster_parameters = sum_parameters
 
         # 簇间联邦学习
         # 聚合所有簇的全局模型参数
-        global_parameters = None  # 这个簇的参数
+        global_parameters = None
         for cluster_label, cluster_params in cluster_global_models.items():
-            e = get_e()
-            h_r_bs = dis_r_bs[cluster_label] ** (-2) * 0.001
-            b_r[cluster_label] = min(ETA / h_r_bs, MAX_P ** 0.5)
-
             if global_parameters is None:
-                global_parameters = {key: single_channel(val.clone(), h_r_bs, b_r[cluster_label], e) for key, val in
-                                     cluster_params.items()}
+                global_parameters = {key: val.clone() for key, val in cluster_params.items()}
             else:
                 for key in cluster_params:
-                    global_parameters[key] += single_channel(cluster_params[key].clone(), h_r_bs, b_r[cluster_label], e)
-        ETA = cal_eta(dis,b_n,dis_r_bs,b_r)
+                    global_parameters[key] += cluster_params[key]
+
         # 计算最终全局模型的平均参数
         if global_parameters is not None:
             num_clusters = len(cluster_global_models)
             for key in global_parameters:
-                global_parameters[key] /= (num_clusters*ETA)
+                global_parameters[key] /= product_b_r_b_n
                 # 如果需要添加噪声或其他操作，可以在此处进行
 
-        # 更新中心服务器的模型参数
-        net.load_state_dict(global_parameters, strict=True)
 
         # test_txt.write("communicate round " + str(i + 1) + str('accuracy: {}'.format(sum_accu / num)) + "\n")
 
@@ -347,7 +289,6 @@ if __name__ == "__main__":
             num += 1
         print("\n" + 'accuracy: {}'.format(sum_accu / num))
         result.append(float(sum_accu / num))
-
         test_txt.write("communicate round " + str(i + 1) + "  ")
         test_txt.write('accuracy: ' + str(float(sum_accu / num)) + "\n")
         # test_txt.close()
@@ -362,15 +303,15 @@ if __name__ == "__main__":
                                                                                                 args['learning_rate'],
                                                                                                 args['num_of_clients'],
                                                                                                 args['cfraction'])))
+
+    df = pd.DataFrame([acc], columns=[f'Column_{i + 1}' for i in range(len(acc))])
     episodes_list = list(range(len(result)))
     plt.plot(episodes_list, result)
     plt.xlabel('communicate round')
     plt.ylabel('accuracy')
     plt.title('无优化')
     plt.show()
-    """df = pd.DataFrame([acc], columns=[f'Column_{i + 1}' for i in range(len(acc))])
-
     # 将 DataFrame 存储到 Excel 文件
     excel_file_path = 'output.xlsx'
     df.to_excel(excel_file_path, index=False)
-    test_txt.close()"""
+    test_txt.close()
