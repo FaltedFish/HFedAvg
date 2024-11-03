@@ -310,7 +310,7 @@ if __name__ == "__main__":
     plt.ylabel('accuracy')
     plt.title('无优化')
     plt.show()
-    csv_file_path = "target.csv"
+    csv_file_path = f"target_{args['num_of_clients']}.csv"
     with open(csv_file_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
 
