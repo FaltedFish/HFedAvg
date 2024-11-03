@@ -91,7 +91,7 @@ def cal_eta(dis,b_n,dis_r_bs,b_r):
     sum_hr2_br2=0
     for i in range(len(h_r_bs)):
         sum_hr2_br2+=h_r_bs[i]**2*b_r[i]**2
-    noise = 10e-5
+    noise = 1e-22
     return (sum_hn2_bn2+noise+noise/sum_hr2_br2)/sum_hn_bn
 
 if __name__ == "__main__":
@@ -178,6 +178,7 @@ if __name__ == "__main__":
 
     # 得到全局的参数
     global_parameters = {}
+    test_sum_parameters = {}
     # net.state_dict()  # 获取模型参数以共享
 
     # 得到每一层中全连接层中的名称fc1.weight
@@ -188,6 +189,7 @@ if __name__ == "__main__":
         print("张量的维度:" + str(var.shape))
         print("张量的Size" + str(var.size()))
         global_parameters[key] = var.clone()
+        test_sum_parameters[key] = var.clone()
 
     # Metric为聚类的依据，可为可解释性矩阵，距离等，此处自定义了聚类指标
     np.random.seed(0)  # 设置随机种子以确保结果的可重复性
@@ -236,6 +238,8 @@ if __name__ == "__main__":
     # 通讯次数一共1000次
     acc = []
     parameters = [{} for _ in range(len(cluster_labels))]
+    client_parameters =None
+
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
 
@@ -254,8 +258,9 @@ if __name__ == "__main__":
                     net,
                     loss_func,
                     opti,
-                    global_parameters
+                    test_sum_parameters
                 )
+                client_parameters = copy.deepcopy(local_parameters)
                 #print("local:",local_parameters)
                 # single_received_by_relay 中继收到的某一个节点的信号
                 e = get_e()
@@ -333,7 +338,7 @@ if __name__ == "__main__":
                 # 如果需要添加噪声或其他操作，可以在此处进行
 
         # 更新中心服务器的模型参数
-        net.load_state_dict(global_parameters, strict=True)
+        net.load_state_dict(test_sum_parameters, strict=True)
 
         # test_txt.write("communicate round " + str(i + 1) + str('accuracy: {}'.format(sum_accu / num)) + "\n")
 
@@ -346,7 +351,7 @@ if __name__ == "__main__":
         # 通讯的频率
         # if (i + 1) % args['val_freq'] == 0:
         #  加载Server在最后得到的模型参数
-        net.load_state_dict(global_parameters, strict=True)
+        net.load_state_dict(test_sum_parameters, strict=True)
         sum_accu = 0
         num = 0
         # 载入测试集
@@ -369,12 +374,13 @@ if __name__ == "__main__":
 
         if (i + 1) % args['save_freq'] == 0:
             torch.save(net, os.path.join(args['save_path'],
-                                         '{}_num_comm{}_E{}_B{}_lr{}_num_clients{}_cf{}'.format(args['model_name'],
-                                                                                                i, args['epoch'],
-                                                                                                args['batchsize'],
-                                                                                                args['learning_rate'],
-                                                                                                args['num_of_clients'],
-                                                                                                args['cfraction'])))
+                                         '{}_num_comm{}_E{}_B{}_lr{}_num_clients{}_cf{}'.format(
+                                             args['model_name'],
+                                             i, args['epoch'],
+                                             args['batchsize'],
+                                             args['learning_rate'],
+                                             args['num_of_clients'],
+                                             args['cfraction'])))
     episodes_list = list(range(len(result)))
     plt.plot(episodes_list, result)
     plt.xlabel('communicate round')
