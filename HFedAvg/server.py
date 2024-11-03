@@ -9,6 +9,8 @@ import torch
 import pandas as pd
 import torch.nn.functional as F
 from torch import optim
+
+from HFedAvg.signals import get_e
 from Models import Mnist_2NN, Mnist_CNN, breast_net, heart_net, phone_net
 from clients import ClientsGroup, client
 from model.WideResNet import WideResNet
@@ -202,56 +204,10 @@ if __name__ == "__main__":
     # num_comm 表示通信次数，此处设置为1k
     # 通讯次数一共1000次
     acc = []
+    mse_parameters=None
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
-
-        '''
-        # 对随机选的将100个客户端进行随机排序
-        order = np.random.permutation(args['num_of_clients'])
-        print("order:")
-        print(len(order))
-        print(order)
-        # 生成个客户端
-        clients_in_comm = ['client{}'.format(i) for i in order[0:num_in_comm]]
-
-
-        print("客户端"+str(clients_in_comm))
-        # print(type(clients_in_comm)) # <class 'list'>
-
-
-        sum_parameters = None
-        # 每个Client基于当前模型参数和自己的数据训练并更新模型
-        # 返回每个Client更新后的参数
-
-        # 这里的clients_
-        for client in tqdm(clients_in_comm):
-            # 获取当前Client训练得到的参数
-            # 这一行代码表示Client端的训练函数，我们详细展开：
-            # local_parameters 得到客户端的局部变量
-            local_parameters = myClients.clients_set[client].localUpdate(args['epoch'], args['batchsize'], net,
-                                                                         loss_func, opti, global_parameters)
-
-            #for param_name, param in local_parameters.items():
-                #noise = torch.randn_like(param) * 0.01
-                #local_parameters[param_name] += noise
-            #for param_name in local_parameters:
-                #local_parameters[param_name] += 0.03 * local_parameters[param_name]
-            #print(local_parameters)
-            # 对所有的Client返回的参数累加（最后取平均值）
-            if sum_parameters is None:
-                sum_parameters = {}
-                for key, var in local_parameters.items():
-                    sum_parameters[key] = var.clone()
-            else:
-                for var in sum_parameters:
-                    sum_parameters[var] = sum_parameters[var] + local_parameters[var]
-        # 取平均值，得到本次通信中Server得到的更新后的模型参数
-        for var in global_parameters:
-            global_parameters[var] = (sum_parameters[var] / num_in_comm)
-            global_parameters[var] += 0.01 * global_parameters[var]
-
-        '''
-
+        mse_parameters = None
         cluster_global_models = {}
         for cluster_label, clients in cluster_clients.items():
             sum_parameters = None  # 用于累积簇内所有客户端的模型参数
@@ -267,7 +223,12 @@ if __name__ == "__main__":
                     opti,
                     global_parameters
                 )
+                if mse_parameters is None:
+                    mse_parameters=local_parameters.copy()
+                else:
+                    mse_parameters={key: mse_parameters[key] + local_parameters[key] for key in mse_parameters if key in local_parameters}
 
+                local_parameters={key: val+get_e() for key, val in local_parameters.items()}
                 # 将本地更新的模型参数累加到 sum_parameters
                 if sum_parameters is None:
                     sum_parameters = {key: val.clone() for key, val in local_parameters.items()}
@@ -291,12 +252,14 @@ if __name__ == "__main__":
             else:
                 for key in cluster_params:
                     global_parameters[key] += cluster_params[key]
-
+        mse=0
         # 计算最终全局模型的平均参数
         if global_parameters is not None:
             num_clusters = len(cluster_global_models)
             for key in global_parameters:
                 global_parameters[key] /= num_clusters
+                mse_parameters[key]/=args['num_of_clients']
+                mse+=torch.sum((mse_parameters[key] - global_parameters[key]) ** 2).item()
                 # 如果需要添加噪声或其他操作，可以在此处进行
         # test_txt.write("communicate round " + str(i + 1) + str('accuracy: {}'.format(sum_accu / num)) + "\n")
 
@@ -310,6 +273,8 @@ if __name__ == "__main__":
         # if (i + 1) % args['val_freq'] == 0:
         #  加载Server在最后得到的模型参数
         net.load_state_dict(global_parameters, strict=True)
+
+        print("mse=",mse)
         sum_accu = 0
         num = 0
         # 载入测试集
