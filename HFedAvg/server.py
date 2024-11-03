@@ -80,7 +80,7 @@ def getbound(anchor):
 
 
 def get_b_n():
-    return np.random.uniform(1, 2, 20)
+    return np.random.uniform(1, 2, args["num_of_clients"])
 
 
 if __name__ == "__main__":
@@ -297,7 +297,7 @@ if __name__ == "__main__":
     plt.ylabel('accuracy')
     plt.title('无优化')
     plt.show()
-    csv_file_path = "one_step.csv"
+    csv_file_path = f"one_step_{args['num_of_clients']}.csv"
     with open(csv_file_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
 
