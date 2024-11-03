@@ -14668,3 +14668,13 @@ communicate round 97  accuracy: 0.23375
 communicate round 98  accuracy: 0.23375
 communicate round 99  accuracy: 0.23375
 communicate round 100  accuracy: 0.23375
+communicate round 1  accuracy: 0.23875
+communicate round 2  accuracy: 0.25625
+communicate round 1  accuracy: 0.16125
+communicate round 2  accuracy: 0.22625
+communicate round 1  accuracy: 0.2425
+communicate round 2  accuracy: 0.2425
+communicate round 1  accuracy: 0.2375
+communicate round 2  accuracy: 0.23375
+communicate round 1  accuracy: 0.1925
+communicate round 2  accuracy: 0.24625

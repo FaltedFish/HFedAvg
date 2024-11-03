@@ -1,3 +1,4 @@
+import csv
 import os
 import argparse
 
@@ -214,6 +215,7 @@ if __name__ == "__main__":
     product_b_r_b_n =0
     for i in range(args['num_comm']):
         print("communicate round {}".format(i + 1))
+        product_b_r_b_n = 0
 
         cluster_global_models = {}
         for cluster_label, clients in cluster_clients.items():
@@ -236,12 +238,11 @@ if __name__ == "__main__":
                     sum_parameters = {key: val.clone()*b_n[int(client[client.find("client") + len("client"):])] for key, val in local_parameters.items()}
                 else:
                     for key in local_parameters:
-                        sum_parameters[key] += local_parameters[key]*b_n[int(client(client.find("client") + len("client")))]
+                        sum_parameters[key] += local_parameters[key]*b_n[int(client[client.find("client") + len("client"):])]
                 product_b_r_b_n+=b_r[cluster_label]*b_n[int(client[client.find("client") + len("client"):])]
 
             # 计算簇内全局模型参数的平均值
             if sum_parameters is not None:
-                num_clients_in_cluster = len(clients)
                 for key in sum_parameters:
                     sum_parameters[key] *= b_r[cluster_label]
                     cluster_global_models[cluster_label] = sum_parameters
@@ -311,7 +312,12 @@ if __name__ == "__main__":
     plt.ylabel('accuracy')
     plt.title('无优化')
     plt.show()
-    # 将 DataFrame 存储到 Excel 文件
-    excel_file_path = 'output.xlsx'
-    df.to_excel(excel_file_path, index=False)
-    test_txt.close()
+
+    csv_file_path = "two_step.csv"
+    with open(csv_file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+
+        # 将数组中的每个元素作为一行写入CSV文件的一列
+        for value in result:
+            writer.writerow([value])
+        csvfile.flush()
