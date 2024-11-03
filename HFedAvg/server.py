@@ -325,7 +325,7 @@ if __name__ == "__main__":
     plt.title('无优化')
     plt.show()
 
-    csv_file_path = "two_step.csv"
+    csv_file_path = f"two_step_{args['num_of_clients']}.csv"
     with open(csv_file_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
 
